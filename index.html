@@ -1,220 +1,628 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chameleon Vision | Detector de Color</title>
-    <style>
-        :root {
-            --bg-color: #121212;
-            --accent-color: #00ffcc;
-            --text-color: #ffffff;
-            --card-bg: rgba(255, 255, 255, 0.05);
-            --transition-speed: 0.5s;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chameleon Vision</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --fg: #f0ede6;
+      --accent: #00ffcc;
+      --color-now: #00ffcc;
+      --color-dim: rgba(0,255,204,0.12);
+      --trans: 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
-        body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            transition: background-color var(--transition-speed) ease;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow-x: hidden;
-        }
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'DM Mono', monospace;
+      overflow: hidden;
+    }
 
-        .container {
-            width: 90%;
-            max-width: 500px;
-            text-align: center;
-            padding: 20px;
-            background: var(--card-bg);
-            backdrop-filter: blur(10px);
-            border-radius: 30px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-        }
+    /* ─── CALIBRATION SCREEN ─────────────────────────── */
+    #calibration-screen {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; flex-direction: column;
+      background: #000;
+      transition: opacity 0.7s ease, visibility 0.7s ease;
+    }
+    #calibration-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 
-        header h1 { font-size: 1.8rem; letter-spacing: 2px; margin-bottom: 5px; }
-        .highlight { color: var(--accent-color); text-shadow: 0 0 10px var(--accent-color); }
-        header p { font-size: 0.9rem; opacity: 0.7; margin-bottom: 25px; }
+    #video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      position: absolute; inset: 0;
+      filter: brightness(0.85);
+    }
 
-        .camera-wrapper {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 4 / 3;
-            background: #000;
-            border-radius: 20px;
-            overflow: hidden;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            margin-bottom: 20px;
-        }
+    .cal-overlay {
+      position: relative; z-index: 2;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: space-between;
+      height: 100%; padding: 40px 30px 50px;
+      background: linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.7) 0%,
+        rgba(0,0,0,0) 30%,
+        rgba(0,0,0,0) 60%,
+        rgba(0,0,0,0.85) 100%
+      );
+    }
 
-        video { width: 100%; height: 100%; object-fit: cover; }
+    .cal-title {
+      text-align: center;
+    }
+    .cal-title h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(2.5rem, 8vw, 4rem);
+      letter-spacing: 6px;
+      color: #fff;
+      text-shadow: 0 0 30px rgba(0,255,204,0.6);
+    }
+    .cal-title h1 span { color: var(--accent); }
+    .cal-title p {
+      font-size: 0.75rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: 0.6;
+      margin-top: 6px;
+    }
 
-        .crosshair {
-            position: absolute; top: 50%; left: 50%; width: 30px; height: 30px;
-            border: 2px solid var(--accent-color); border-radius: 50%;
-            transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
-        }
+    .crosshair-wrap {
+      position: absolute; inset: 0; z-index: 1;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
 
-        .crosshair::before, .crosshair::after { content: ''; position: absolute; background: var(--accent-color); }
-        .crosshair::before { top: 50%; left: -10px; width: 50px; height: 1px; }
-        .crosshair::after { left: 50%; top: -10px; height: 50px; width: 1px; }
+    .reticle {
+      width: 80px; height: 80px;
+      position: relative;
+    }
+    .reticle::before, .reticle::after {
+      content: '';
+      position: absolute;
+      background: var(--accent);
+      opacity: 0.9;
+    }
+    .reticle::before { top: 50%; left: -20px; width: calc(100% + 40px); height: 1px; }
+    .reticle::after  { left: 50%; top: -20px; height: calc(100% + 40px); width: 1px; }
 
-        .scan-area {
-            position: absolute; top: 50%; left: 50%; width: 60px; height: 60px;
-            border: 1px dashed rgba(255, 255, 255, 0.5);
-            transform: translate(-50%, -50%); pointer-events: none;
-            animation: scan 4s linear infinite;
-        }
+    .reticle-ring {
+      position: absolute; inset: 0;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 16px rgba(0,255,204,0.5), inset 0 0 10px rgba(0,255,204,0.1);
+      animation: pulse-ring 2.5s ease-in-out infinite;
+    }
 
-        @keyframes scan {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
-        }
+    @keyframes pulse-ring {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.15); opacity: 0.5; }
+    }
 
-        .info-panel {
-            display: flex; align-items: center; gap: 20px; padding: 20px;
-            background: rgba(0, 0, 0, 0.2); border-radius: 20px; margin-bottom: 20px; text-align: left;
-        }
+    .scan-line {
+      position: absolute;
+      left: -20px; right: -20px;
+      height: 2px;
+      background: linear-gradient(to right, transparent, var(--accent), transparent);
+      animation: scan-move 3s linear infinite;
+      opacity: 0.7;
+    }
 
-        .preview-circle {
-            width: 60px; height: 60px; border-radius: 50%; background: #000;
-            border: 3px solid rgba(255, 255, 255, 0.2); transition: background-color 0.3s ease;
-        }
+    @keyframes scan-move {
+      0%   { top: -30px; opacity: 0; }
+      10%  { opacity: 0.7; }
+      90%  { opacity: 0.7; }
+      100% { top: calc(100% + 30px); opacity: 0; }
+    }
 
-        .details h2 { font-size: 1.2rem; margin-bottom: 5px; }
-        #color-hex { font-family: monospace; font-size: 1rem; opacity: 0.8; }
-        .message { margin-top: 5px; font-size: 0.85rem; font-style: italic; color: var(--accent-color); }
-        #score-container { font-size: 1.5rem; font-weight: 900; margin: 10px 0; color: var(--accent-color); }
-        #color-value { font-size: 2rem; color: #000; background: var(--accent-color); padding: 0 10px; border-radius: 8px; margin-right: 5px; }
-        .verdict { font-size: 1.2rem; font-weight: bold; text-transform: uppercase; margin-top: 10px; color: var(--accent-color); }
+    .ready-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      width: 100%; max-width: 360px;
+    }
+    .ready-btn p {
+      font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase;
+      opacity: 0.55; text-align: center;
+    }
+    #ready-btn {
+      width: 100%; padding: 18px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.5rem; letter-spacing: 5px;
+      background: var(--accent); color: #000; border: none;
+      border-radius: 6px; cursor: pointer;
+      box-shadow: 0 0 40px rgba(0,255,204,0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    #ready-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 60px rgba(0,255,204,0.7);
+    }
+    #ready-btn:active { transform: scale(0.97); }
 
-        #start-btn {
-            width: 100%; padding: 15px; background: var(--accent-color); border: none; border-radius: 15px;
-            color: #000; font-weight: bold; font-size: 1rem; cursor: pointer; transition: all 0.3s ease;
-        }
-        #start-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 255, 204, 0.5); }
+    /* ─── MAIN SCREEN ────────────────────────────────── */
+    #main-screen {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 30px;
+      transition: background-color var(--trans);
+      opacity: 0; visibility: hidden;
+    }
+    #main-screen.visible { opacity: 1; visibility: visible; }
 
-        .test-bench { margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-        .test-bench p { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; }
-        .palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-        .test-color { aspect-ratio: 1; border-radius: 12px; cursor: pointer; border: 2px solid rgba(255, 255, 255, 0.1); transition: all 0.2s ease; }
-        .test-color:hover { transform: scale(1.1); }
-    </style>
+    /* Animated background blobs */
+    .bg-blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.18;
+      pointer-events: none;
+      transition: background-color 1.2s ease;
+    }
+    .blob-a { width: 60vw; height: 60vw; top: -15%; left: -10%; background: var(--color-now); }
+    .blob-b { width: 40vw; height: 40vw; bottom: -10%; right: -5%; background: var(--color-now); opacity: 0.1; }
+
+    /* Thin noise grain texture via CSS */
+    #main-screen::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      opacity: 0.5; pointer-events: none;
+    }
+
+    /* Center content */
+    .stage {
+      position: relative; z-index: 2;
+      text-align: center;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 0;
+      max-width: 700px; width: 100%;
+      animation: none;
+    }
+
+    .color-label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(5rem, 22vw, 12rem);
+      line-height: 0.9;
+      letter-spacing: 4px;
+      color: var(--color-now);
+      text-shadow:
+        0 0 60px var(--color-now),
+        0 0 120px var(--color-dim),
+        0 2px 0 rgba(0,0,0,0.5);
+      transition: color var(--trans), text-shadow var(--trans);
+      will-change: transform;
+    }
+
+    .color-msg {
+      font-family: 'Instrument Serif', serif;
+      font-style: italic;
+      font-size: clamp(1rem, 4vw, 1.6rem);
+      opacity: 0.75;
+      margin-top: 16px;
+      letter-spacing: 0.5px;
+      max-width: 420px;
+      transition: opacity 0.4s;
+    }
+
+    .verdict-text {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(1.4rem, 6vw, 2.5rem);
+      letter-spacing: 6px;
+      color: var(--color-now);
+      margin-top: 8px;
+      text-shadow: 0 0 20px var(--color-dim);
+      transition: color var(--trans), text-shadow var(--trans);
+    }
+
+    .divider {
+      width: 60px; height: 1px;
+      background: var(--color-now);
+      margin: 20px auto;
+      opacity: 0.4;
+      transition: background-color var(--trans);
+    }
+
+    .meta-row {
+      display: flex; gap: 28px; align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      opacity: 0.45;
+    }
+    .meta-row span { transition: opacity 0.4s; }
+
+    /* Score pill */
+    .score-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 100px;
+      padding: 4px 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.85rem;
+    }
+    .score-val {
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: var(--color-now);
+      transition: color var(--trans);
+    }
+
+    /* Preview dot */
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--color-now);
+      display: inline-block;
+      box-shadow: 0 0 8px var(--color-now);
+      transition: background-color var(--trans), box-shadow var(--trans);
+    }
+
+    /* Entry animation */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .color-label.enter { animation: fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) both; }
+    .color-msg.enter   { animation: fadeUp 0.5s 0.07s cubic-bezier(0.16,1,0.3,1) both; }
+    .verdict-text.enter{ animation: fadeUp 0.5s 0.14s cubic-bezier(0.16,1,0.3,1) both; }
+
+    /* ─── TEST PALETTE ───────────────────────────────── */
+    .palette-dock {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      z-index: 50;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      opacity: 0; visibility: hidden;
+      transition: opacity 0.6s 0.4s, visibility 0.6s 0.4s;
+    }
+    .palette-dock.visible { opacity: 1; visibility: visible; }
+    .palette-dock p {
+      font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.4;
+    }
+    .palette-row {
+      display: flex; gap: 8px;
+    }
+    .swatch {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.15);
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .swatch:hover {
+      transform: scale(1.25);
+      box-shadow: 0 0 12px currentColor;
+    }
+
+    /* Speaking indicator */
+    .speaking-dot {
+      position: fixed; top: 20px; right: 22px; z-index: 200;
+      display: flex; align-items: center; gap: 7px;
+      opacity: 0; transition: opacity 0.3s;
+      font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--fg);
+    }
+    .speaking-dot.active { opacity: 0.55; }
+    .speaking-dot .bars {
+      display: flex; gap: 2px; align-items: flex-end; height: 14px;
+    }
+    .speaking-dot .bars span {
+      width: 3px; border-radius: 2px;
+      background: var(--color-now);
+      animation: bar-bounce 0.7s ease-in-out infinite;
+      transition: background-color var(--trans);
+    }
+    .bars span:nth-child(1) { height: 6px; animation-delay: 0s; }
+    .bars span:nth-child(2) { height: 12px; animation-delay: 0.15s; }
+    .bars span:nth-child(3) { height: 8px; animation-delay: 0.3s; }
+    .bars span:nth-child(4) { height: 14px; animation-delay: 0.1s; }
+    @keyframes bar-bounce {
+      0%, 100% { transform: scaleY(0.5); }
+      50%       { transform: scaleY(1); }
+    }
+
+    canvas { display: none; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>CHAMELEON <span class="highlight">VISION</span></h1>
-            <p>Apunta con tu cámara a un objeto para activar una respuesta.</p>
-        </header>
-        <main>
-            <div class="camera-wrapper">
-                <video id="video" autoplay playsinline></video>
-                <div class="crosshair"></div>
-                <div class="scan-area"></div>
-            </div>
-            <div class="info-panel">
-                <div id="color-preview" class="preview-circle"></div>
-                <div class="details">
-                    <h2 id="color-name">Iniciando cámara...</h2>
-                    <p id="color-hex">#000000</p>
-                    <div id="score-container"><span id="color-value">0</span>/10</div>
-                    <p id="reaction-msg" class="message">Esperando señal de video...</p>
-                    <p id="verdict-msg" class="verdict"></p>
-                </div>
-            </div>
-            <button id="start-btn">ACTIVAR CÁMARA</button>
-            <div class="test-bench">
-                <p>O prueba con estos colores:</p>
-                <div class="palette">
-                    <div class="test-color" style="background: #ff4b2b;"></div>
-                    <div class="test-color" style="background: #ff8c00;"></div>
-                    <div class="test-color" style="background: #ffd700;"></div>
-                    <div class="test-color" style="background: #2ecc71;"></div>
-                    <div class="test-color" style="background: #00ced1;"></div>
-                    <div class="test-color" style="background: #3498db;"></div>
-                    <div class="test-color" style="background: #9b59b6;"></div>
-                    <div class="test-color" style="background: #ff69b4;"></div>
-                    <div class="test-color" style="background: #000000;"></div>
-                    <div class="test-color" style="background: #ffffff;"></div>
-                </div>
-            </div>
-        </main>
+
+  <!-- ── CALIBRATION SCREEN ────────────────────────────── -->
+  <div id="calibration-screen">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="crosshair-wrap">
+      <div class="reticle">
+        <div class="reticle-ring"></div>
+        <div class="scan-line"></div>
+      </div>
     </div>
-    <canvas id="canvas" style="display:none;"></canvas>
-    <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const colorPreview = document.getElementById('color-preview');
-        const colorNameText = document.getElementById('color-name');
-        const colorHexText = document.getElementById('color-hex');
-        const colorValueText = document.getElementById('color-value');
-        const reactionMsg = document.getElementById('reaction-msg');
-        const verdictMsg = document.getElementById('verdict-msg');
-        const startBtn = document.getElementById('start-btn');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        let isCameraActive = false;
-        const reactions = [
-            { range: [0, 20], name: 'Rojo', msg: 'Alerta de riesgo sistémico.', color: '#ff4b2b', value: 1 },
-            { range: [20, 45], name: 'Naranja', msg: 'Inestabilidad emocional y económica.', color: '#ff8c00', value: 2 },
-            { range: [45, 70], name: 'Amarillo', msg: 'Esfuerzo insuficiente para el mercado.', color: '#ffd700', value: 3 },
-            { range: [70, 150], name: 'Verde', msg: 'Crecimiento dentro de los límites.', color: '#2ecc71', value: 4 },
-            { range: [150, 200], name: 'Cian', msg: 'Serenidad improductiva.', color: '#00ced1', value: 5 },
-            { range: [200, 260], name: 'Azul', msg: 'Estabilidad de clase media.', color: '#3498db', value: 6 },
-            { range: [260, 320], name: 'Violeta', msg: 'Aspiraciones de estatus superior.', color: '#9b59b6', value: 7 },
-            { range: [320, 360], name: 'Rosa', msg: 'Optimismo ingenuo y frágil.', color: '#ff69b4', value: 8 }
-        ];
-        const verdicts = { 1: "FRACASO ABSOLUTO.", 2: "DECEPCIÓN SOCIAL.", 3: "SIN FUTURO.", 4: "MANO DE OBRA BARATA.", 5: "MEDIOCRIDAD.", 6: "ENGRANAJE ÚTIL.", 7: "ACTIVO RENTABLE.", 8: "CAPITAL HUMANO ALTO.", 9: "ELITE PRODUCTIVA.", 10: "PERFECCIÓN SUPREMA." };
-        async function initCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 640, height: 480 } });
-                video.srcObject = stream;
-                isCameraActive = true;
-                startBtn.style.display = 'none';
-                video.onloadedmetadata = () => { canvas.width = video.videoWidth; canvas.height = video.videoHeight; processVideo(); };
-            } catch (err) { reactionMsg.innerText = "Error: Sin acceso a cámara."; }
+    <div class="cal-overlay">
+      <div class="cal-title">
+        <h1>CHAMELEON <span>VISION</span></h1>
+        <p>Apunta la cámara al objeto que deseas analizar</p>
+      </div>
+      <div class="ready-btn">
+        <p>Cuando estés listo, confirma para iniciar el análisis</p>
+        <button id="ready-btn">LISTO &nbsp;→</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MAIN SCREEN ────────────────────────────────────── -->
+  <div id="main-screen">
+    <div class="bg-blob blob-a"></div>
+    <div class="bg-blob blob-b"></div>
+
+    <div class="stage">
+      <div class="color-label" id="color-name">—</div>
+      <div class="color-msg" id="color-msg">Iniciando análisis...</div>
+      <div class="verdict-text" id="verdict-text"></div>
+      <div class="divider"></div>
+      <div class="meta-row">
+        <span class="dot" id="color-dot"></span>
+        <span id="color-hex">#000000</span>
+        <span class="score-pill">
+          <span class="score-val" id="score-val">0</span><span>/10</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SPEAKING INDICATOR ─────────────────────────────── -->
+  <div class="speaking-dot" id="speaking-indicator">
+    <div class="bars">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    voz
+  </div>
+
+  <!-- ── PALETTE DOCK ───────────────────────────────────── -->
+  <div class="palette-dock" id="palette-dock">
+    <p>Probar color manual</p>
+    <div class="palette-row">
+      <div class="swatch" style="background:#ff4b2b;"></div>
+      <div class="swatch" style="background:#ff8c00;"></div>
+      <div class="swatch" style="background:#ffd700;"></div>
+      <div class="swatch" style="background:#2ecc71;"></div>
+      <div class="swatch" style="background:#00ced1;"></div>
+      <div class="swatch" style="background:#3498db;"></div>
+      <div class="swatch" style="background:#9b59b6;"></div>
+      <div class="swatch" style="background:#ff69b4;"></div>
+      <div class="swatch" style="background:#111111;"></div>
+      <div class="swatch" style="background:#f0f0f0;"></div>
+    </div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    /* ─── ELEMENTS ─────────────────────────────────────── */
+    const video             = document.getElementById('video');
+    const canvas            = document.getElementById('canvas');
+    const ctx               = canvas.getContext('2d', { willReadFrequently: true });
+    const calScreen         = document.getElementById('calibration-screen');
+    const mainScreen        = document.getElementById('main-screen');
+    const paletteDock       = document.getElementById('palette-dock');
+    const readyBtn          = document.getElementById('ready-btn');
+    const speakingIndicator = document.getElementById('speaking-indicator');
+
+    const elName    = document.getElementById('color-name');
+    const elMsg     = document.getElementById('color-msg');
+    const elVerdict = document.getElementById('verdict-text');
+    const elHex     = document.getElementById('color-hex');
+    const elScore   = document.getElementById('score-val');
+    const elDot     = document.getElementById('color-dot');
+    const blobA     = document.querySelector('.blob-a');
+    const blobB     = document.querySelector('.blob-b');
+
+    /* ─── DATA ─────────────────────────────────────────── */
+    const reactions = [
+      { range:[0,20],   name:'Rojo',    msg:'Alerta de riesgo sistémico.',           color:'#ff4b2b', value:1 },
+      { range:[20,45],  name:'Naranja', msg:'Inestabilidad emocional y económica.',  color:'#ff8c00', value:2 },
+      { range:[45,70],  name:'Amarillo',msg:'Esfuerzo insuficiente para el mercado.',color:'#ffd700', value:3 },
+      { range:[70,150], name:'Verde',   msg:'Crecimiento dentro de los límites.',    color:'#2ecc71', value:4 },
+      { range:[150,200],name:'Cian',    msg:'Serenidad improductiva.',               color:'#00ced1', value:5 },
+      { range:[200,260],name:'Azul',    msg:'Estabilidad de clase media.',           color:'#3498db', value:6 },
+      { range:[260,320],name:'Violeta', msg:'Aspiraciones de estatus superior.',     color:'#9b59b6', value:7 },
+      { range:[320,360],name:'Rosa',    msg:'Optimismo ingenuo y frágil.',           color:'#ff69b4', value:8 },
+    ];
+
+    const verdicts = {
+      1:'Fracaso absoluto.',
+      2:'Decepción social.',
+      3:'Sin futuro.',
+      4:'Mano de obra barata.',
+      5:'Mediocridad.',
+      6:'Engranaje útil.',
+      7:'Activo rentable.',
+      8:'Capital humano alto.',
+      9:'Elite productiva.',
+      10:'Perfección suprema.'
+    };
+
+    /* ─── STATE ────────────────────────────────────────── */
+    let isAnalyzing     = false;
+    let lastColorName   = '';
+    let speechDebounce  = null;
+    let isSpeaking      = false;
+
+    /* ─── INIT CAMERA ──────────────────────────────────── */
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: 640, height: 480 }
+        });
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          canvas.width  = video.videoWidth;
+          canvas.height = video.videoHeight;
+        };
+      } catch (err) {
+        console.warn('Camera error:', err);
+      }
+    }
+
+    /* ─── CALIBRATION → MAIN ───────────────────────────── */
+    readyBtn.addEventListener('click', () => {
+      calScreen.classList.add('hidden');
+      mainScreen.classList.add('visible');
+      paletteDock.classList.add('visible');
+      isAnalyzing = true;
+      processVideo();
+    });
+
+    /* ─── VIDEO PROCESSING ─────────────────────────────── */
+    function processVideo() {
+      if (!isAnalyzing) return;
+      try {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const cx = Math.floor(canvas.width / 2);
+        const cy = Math.floor(canvas.height / 2);
+        const data = ctx.getImageData(cx - 10, cy - 10, 20, 20).data;
+        let r = 0, g = 0, b = 0;
+        const count = data.length / 4;
+        for (let i = 0; i < data.length; i += 4) {
+          r += data[i]; g += data[i+1]; b += data[i+2];
         }
-        function processVideo() {
-            if (!isCameraActive) return;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData((canvas.width/2)-10, (canvas.height/2)-10, 20, 20).data;
-            let r=0,g=0,b=0;
-            for (let i = 0; i < imageData.length; i += 4) { r += imageData[i]; g += imageData[i+1]; b += imageData[i+2]; }
-            r=Math.floor(r/(imageData.length/4)); g=Math.floor(g/(imageData.length/4)); b=Math.floor(b/(imageData.length/4));
-            updateUI(r, g, b, rgbToHex(r, g, b), rgbToHsl(r, g, b));
-            requestAnimationFrame(processVideo);
+        r = Math.floor(r / count);
+        g = Math.floor(g / count);
+        b = Math.floor(b / count);
+        updateUI(r, g, b, rgbToHex(r, g, b), rgbToHsl(r, g, b));
+      } catch (e) {}
+      requestAnimationFrame(processVideo);
+    }
+
+    /* ─── UPDATE UI ────────────────────────────────────── */
+    function updateUI(r, g, b, hex, hsl) {
+      const [h, s, l] = hsl;
+
+      let reaction =
+        l < 15 ? { name:'Negro',   msg:'Oscuridad absoluta.',  color:'#1a1a1a', value:10 } :
+        l > 85  ? { name:'Blanco',  msg:'Claridad total.',      color:'#e8e4dc', value:9  } :
+        s < 15  ? { name:'Gris',    msg:'Neutralidad pura.',    color:'#888888', value:5  } :
+        reactions.find(rx => h >= rx.range[0] && h < rx.range[1]);
+
+      if (!reaction) return;
+
+      const verdictStr = verdicts[reaction.value];
+
+      // Update accent CSS var
+      document.documentElement.style.setProperty('--color-now', reaction.color);
+      document.documentElement.style.setProperty('--color-dim', hexToRgba(reaction.color, 0.15));
+
+      // Background tint
+      const bgTint = hexToRgba(reaction.color, 0.05);
+      mainScreen.style.backgroundColor = bgTint;
+
+      // Update blobs
+      blobA.style.background = reaction.color;
+      blobB.style.background = reaction.color;
+
+      // Text elements
+      elHex.textContent   = hex;
+      elScore.textContent = reaction.value;
+
+      if (reaction.name !== lastColorName) {
+        // Animate new color
+        triggerEntry(elName,    reaction.name);
+        triggerEntry(elMsg,     reaction.msg);
+        triggerEntry(elVerdict, verdictStr.toUpperCase());
+        elDot.style.background   = reaction.color;
+        elDot.style.boxShadow    = `0 0 8px ${reaction.color}`;
+
+        scheduleSpeak(reaction.name, reaction.msg, verdictStr);
+        lastColorName = reaction.name;
+      }
+    }
+
+    function triggerEntry(el, text) {
+      el.classList.remove('enter');
+      void el.offsetWidth; // reflow
+      el.textContent = text;
+      el.classList.add('enter');
+    }
+
+    /* ─── SPEECH ───────────────────────────────────────── */
+    function scheduleSpeak(name, msg, verdict) {
+      clearTimeout(speechDebounce);
+      speechDebounce = setTimeout(() => speak(name, msg, verdict), 1500);
+    }
+
+    function speak(name, msg, verdict) {
+      if (!window.speechSynthesis) return;
+      speechSynthesis.cancel();
+      const text = `${name}. ${msg} ${verdict}`;
+      const utt  = new SpeechSynthesisUtterance(text);
+      utt.lang  = 'es-ES';
+      utt.rate  = 0.95;
+      utt.pitch = 1;
+
+      // Pick a Spanish voice if available
+      const voices = speechSynthesis.getVoices();
+      const esVoice = voices.find(v => v.lang.startsWith('es'));
+      if (esVoice) utt.voice = esVoice;
+
+      utt.onstart = () => {
+        isSpeaking = true;
+        speakingIndicator.classList.add('active');
+      };
+      utt.onend = utt.onerror = () => {
+        isSpeaking = false;
+        speakingIndicator.classList.remove('active');
+      };
+      speechSynthesis.speak(utt);
+    }
+
+    // Voices may load async
+    if (window.speechSynthesis) {
+      speechSynthesis.addEventListener('voiceschanged', () => {});
+    }
+
+    /* ─── PALETTE SWATCHES ─────────────────────────────── */
+    document.querySelectorAll('.swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        const rgb = window.getComputedStyle(sw).backgroundColor.match(/\d+/g).map(Number);
+        updateUI(rgb[0], rgb[1], rgb[2], rgbToHex(rgb[0], rgb[1], rgb[2]), rgbToHsl(rgb[0], rgb[1], rgb[2]));
+      });
+    });
+
+    /* ─── HELPERS ──────────────────────────────────────── */
+    function rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(x => x.toString(16).padStart(2,'0')).join('').toUpperCase();
+    }
+
+    function rgbToHsl(r, g, b) {
+      r/=255; g/=255; b/=255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+      let h, s, l=(max+min)/2;
+      if (max===min) { h=s=0; }
+      else {
+        s = l>0.5 ? d/(2-max-min) : d/(max+min);
+        switch(max) {
+          case r: h=(g-b)/d+(g<b?6:0); break;
+          case g: h=(b-r)/d+2; break;
+          case b: h=(r-g)/d+4; break;
         }
-        function updateUI(r, g, b, hex, hsl) {
-            const [h, s, l] = hsl;
-            let reaction = l < 15 ? { name: 'Negro', msg: 'Oscuridad absoluta.', color: '#1a1a1a', value: 10 } :
-                          l > 85 ? { name: 'Blanco', msg: 'Claridad total.', color: '#f0f0f0', value: 9 } :
-                          s < 15 ? { name: 'Gris', msg: 'Neutralidad pura.', color: '#808080', value: 5 } :
-                          reactions.find(res => h >= res.range[0] && h < res.range[1]);
-            if (reaction) {
-                colorNameText.innerText = reaction.name; colorHexText.innerText = hex; colorValueText.innerText = reaction.value;
-                reactionMsg.innerText = reaction.msg; verdictMsg.innerText = verdicts[reaction.value];
-                colorPreview.style.backgroundColor = `rgb(${r},${g},${b})`;
-                document.documentElement.style.setProperty('--accent-color', reaction.color);
-            }
-        }
-        function rgbToHex(r, g, b) { return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase(); }
-        function rgbToHsl(r, g, b) {
-            r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min; let h, s, l=(max+min)/2;
-            if(max===min) h=s=0; else { s=l>0.5?d/(2-max-min):d/(max+min); switch(max){ case r: h=(g-b)/d+(g<b?6:0); break; case g: h=(b-r)/d+2; break; case b: h=(r-g)/d+4; break; } h/=6; }
-            return [Math.floor(h*360), Math.floor(s*100), Math.floor(l*100)];
-        }
-        document.querySelectorAll('.test-color').forEach(btn => btn.addEventListener('click', () => {
-            const rgb = window.getComputedStyle(btn).backgroundColor.match(/\d+/g).map(Number);
-            updateUI(rgb[0], rgb[1], rgb[2], rgbToHex(rgb[0], rgb[1], rgb[2]), rgbToHsl(rgb[0], rgb[1], rgb[2]));
-        }));
-        startBtn.addEventListener('click', initCamera);
-    </script>
+        h/=6;
+      }
+      return [Math.floor(h*360), Math.floor(s*100), Math.floor(l*100)];
+    }
+
+    function hexToRgba(hex, alpha) {
+      const r = parseInt(hex.slice(1,3),16);
+      const g = parseInt(hex.slice(3,5),16);
+      const b = parseInt(hex.slice(5,7),16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    /* ─── BOOT ─────────────────────────────────────────── */
+    initCamera();
+  </script>
 </body>
 </html>
